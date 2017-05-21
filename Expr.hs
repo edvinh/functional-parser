@@ -25,15 +25,16 @@ module Expr(Expr, T, parse, fromString, value, toString) where
 -}
 import Prelude hiding (return, fail)
 import Parser hiding (T)
+import Data.Maybe
 import qualified Dictionary
 
 data Expr = Num Integer | Var String | Add Expr Expr 
-       | Sub Expr Expr | Mul Expr Expr | Div Expr Expr
+       | Sub Expr Expr | Mul Expr Expr | Div Expr Expr | Expo Expr Expr
          deriving Show
 
 type T = Expr
 
-var, num, factor, term, expr :: Parser Expr
+var, num, expo, factor, term, expr :: Parser Expr
 
 term', expr' :: Expr -> Parser Expr
 
@@ -49,11 +50,16 @@ addOp = lit '+' >-> (\ _ -> Add) !
 
 bldOp e (oper,e') = oper e e'
 
-factor = num !
-         var !
-         lit '(' -# expr #- lit ')' !
-         err "illegal factor"
-             
+expOp = lit '^' >-> (\_ -> Expo)
+
+expo = num !
+       var !
+       lit '(' -# expr #- lit ')' !
+       err "illegal factor"
+
+factor' e = expOp # expo >-> bldOp e #> factor' ! return e
+factor = expo #> factor'
+
 term' e = mulOp # factor >-> bldOp e #> term' ! return e
 term = factor #> term'
        
@@ -71,16 +77,15 @@ shw prec (Mul t u) = parens (prec>6) (shw 6 t ++ "*" ++ shw 6 u)
 shw prec (Div t u) = parens (prec>6) (shw 6 t ++ "/" ++ shw 7 u)
 
 value :: Expr -> Dictionary.T String Integer -> Integer
-value (Num n) _ = n
-value (Var v)
-        | Dictionary.lookup v dict == Just(v) = value(v)
-        | otherwise                           = error ("Undeclared variable: " ++ v)
-value (Add t u) = (value t) + (value u)
-value (Sub t u) = (value t) - (value u)
-value (Mul t u) = (value t) * (value u)
-value (Div t u)
-        | u == 0    = error ("Division by zero: " ++ value(t) ++ "/" ++ value(u)) 
-        | otherwise = (value t) / (value u)
+value (Num n) _                 = n
+value (Var v) dict              = fromMaybe (error ("Undeclared variable: " ++ v)) (Dictionary.lookup v dict)
+value (Add t u) dict            = (value t dict) + (value u dict)
+value (Sub t u) dict            = (value t dict) - (value u dict)
+value (Mul t u) dict            = (value t dict) * (value u dict)
+value (Div t u) dict
+        | value u dict == 0     = error ("Division by zero") 
+        | otherwise             = (value t dict) `div` (value u dict)
+value (Expo base exp) dict      = (value base dict) ^ (value exp dict) 
 
 
 instance Parse Expr where

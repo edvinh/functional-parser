@@ -1,6 +1,6 @@
 module Parser(module CoreParser, T, digit, digitVal, chars, letter, err,
               lit, number, iter, accept, require, token,
-              spaces, word, (-#), (#-)) where
+              spaces, word, (-#), (#-), line) where
 import Prelude hiding (return, fail)
 import Data.Char
 import CoreParser
@@ -22,13 +22,13 @@ m -# n = (m # n) >-> snd
 (#-) :: Parser a -> Parser b -> Parser a
 m #- n = (m # n) >-> fst
 
-spaces :: Parser String --not tested
-spaces =  iter isSpace
+spaces :: Parser String
+spaces = iter (char ? isSpace)
 
 token :: Parser a -> Parser a
 token m = m #- spaces
 
-letter :: Parser Char --not tested
+letter :: Parser Char
 letter =  char ? isAlpha
 
 word :: Parser String
@@ -42,7 +42,7 @@ accept :: String -> Parser String
 accept w = (token (chars (length w))) ? (==w)
 
 require :: String -> Parser String
-require w  = accept w ! err "Error: expected " ++ w
+require w  = accept w ! err ("Error: expected " ++ w)
 
 lit :: Char -> Parser Char
 lit c = token char ? (==c)
@@ -56,6 +56,9 @@ digitVal = digit >-> digitToInt >-> fromIntegral
 number' :: Integer -> Parser Integer
 number' n = digitVal #> (\ d -> number' (10*n+d))
           ! return n
+
 number :: Parser Integer
 number = token (digitVal #> number')
 
+line :: Parser String
+line = iter (char ? (/='\n'))
